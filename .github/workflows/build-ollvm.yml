@@ -17,6 +17,16 @@ jobs:
       with:
         path: hikari
 
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/ccache
+        key: ollvm-ccache-windows-${{ github.run_id }}
+        restore-keys: ollvm-ccache-windows-
+
+    - name: Install ccache
+      run: choco install ccache -y --no-progress
+
     - name: Configure
       run: |
         cmake -S hikari/llvm -B build -G Ninja `
@@ -26,6 +36,8 @@ jobs:
           -DLLVM_TARGETS_TO_BUILD="X86;ARM;AArch64" `
           -DLLVM_ENABLE_ZSTD=OFF `
           -DLLVM_USE_CRT_RELEASE=MT `
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
           -DLLVM_INCLUDE_TESTS=OFF `
           -DLLVM_INCLUDE_EXAMPLES=OFF `
           -DLLVM_INCLUDE_BENCHMARKS=OFF
