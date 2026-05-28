@@ -1,0 +1,84 @@
+name: Build Hikari LLVM for Android NDK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-ollvm.yml'
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    name: Hikari-LLVM19 (windows-x86_64)
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: hikari
+
+    - name: Configure
+      run: |
+        cmake -S hikari/llvm -B build -G Ninja `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DLLVM_ENABLE_PROJECTS="clang;lld" `
+          -DLLVM_TARGETS_TO_BUILD="X86;ARM;AArch64" `
+          -DLLVM_ENABLE_ZSTD=OFF `
+          -DLLVM_INCLUDE_TESTS=OFF `
+          -DLLVM_INCLUDE_EXAMPLES=OFF `
+          -DLLVM_INCLUDE_BENCHMARKS=OFF
+
+    - name: Build
+      run: cmake --build build -j $env:NUMBER_OF_PROCESSORS --target clang 2>&1 | Select-Object -Last 20
+
+    - name: Package
+      run: |
+        mkdir out\bin
+        copy build\bin\clang.exe out\bin\
+        copy build\bin\clang++.exe out\bin\
+        Compress-Archive -Path out\* -DestinationPath hikari-llvm19-windows.zip
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: hikari-llvm19-windows
+        path: hikari-llvm19-windows.zip
+        retention-days: 90
+
+  ubuntu:
+    runs-on: ubuntu-24.04
+    name: Hikari-LLVM19 (linux-x86_64)
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: hikari
+
+    - name: Install deps
+      run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
+
+    - name: Configure
+      run: |
+        cmake -S hikari/llvm -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLLVM_ENABLE_PROJECTS="clang;lld" \
+          -DLLVM_TARGETS_TO_BUILD="X86;ARM;AArch64" \
+          -DLLVM_ENABLE_ZSTD=OFF \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DLLVM_INCLUDE_TESTS=OFF \
+          -DLLVM_INCLUDE_EXAMPLES=OFF \
+          -DLLVM_INCLUDE_BENCHMARKS=OFF
+
+    - name: Build
+      run: cmake --build build -j$(nproc) --target clang 2>&1 | tail -20
+
+    - name: Package
+      run: |
+        mkdir -p out/bin
+        cp build/bin/clang build/bin/clang++ out/bin/
+        tar -czf hikari-llvm19-linux.tar.gz -C out .
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: hikari-llvm19-linux
+        path: hikari-llvm19-linux.tar.gz
+        retention-days: 90
