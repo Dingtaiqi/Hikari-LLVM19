@@ -27,6 +27,13 @@ jobs:
     - name: Install ccache
       run: choco install ccache -y --no-progress
 
+    - name: Enable Obfuscation in build
+      run: |
+        # 1. Add Obfuscation to Transforms
+        echo "add_subdirectory(Obfuscation)" >> hikari/llvm/lib/Transforms/CMakeLists.txt
+        # 2. Link LLVMObfuscation into clang
+        echo "target_link_libraries(clang PRIVATE LLVMObfuscation)" >> hikari/clang/tools/driver/CMakeLists.txt
+
     - name: Configure
       run: |
         cmake -S hikari/llvm -B build -G Ninja `
@@ -69,6 +76,11 @@ jobs:
 
     - name: Install deps
       run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
+
+    - name: Enable Obfuscation in build
+      run: |
+        echo "add_subdirectory(Obfuscation)" >> hikari/llvm/lib/Transforms/CMakeLists.txt
+        echo "target_link_libraries(clang PRIVATE LLVMObfuscation)" >> hikari/clang/tools/driver/CMakeLists.txt
 
     - name: Configure
       run: |
