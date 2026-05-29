@@ -6,12 +6,13 @@ on:
     paths:
       - '.github/workflows/build-ollvm.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   windows:
     runs-on: windows-2025
     name: Hikari-LLVM19 (windows-x86_64)
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
     - uses: actions/checkout@v4
       with:
@@ -20,16 +21,22 @@ jobs:
     - name: Cache ccache
       uses: actions/cache@v4
       with:
-        path: ~/ccache
-        key: ollvm-ccache-windows-${{ github.run_id }}
-        restore-keys: ollvm-ccache-windows-
+        path: C:\Users\runneradmin\ccache
+        # Use a stable key: cache resets when the workflow file changes
+        key: hikari-ccache-win-${{ hashFiles('.github/workflows/build-ollvm.yml') }}
+        restore-keys: hikari-ccache-win-
 
     - name: Install ccache
       run: choco install ccache -y --no-progress
+    - name: Setup ccache
+      run: |
+        ccache --set-config=cache_dir=C:\Users\runneradmin\ccache
+        ccache --set-config=max_size=5G
+        ccache --zero-stats
+        ccache --show-config
 
     - name: Link Obfuscation to clang
-      run: |
-        echo "target_link_libraries(clang PRIVATE LLVMObfuscation)" >> hikari/clang/tools/driver/CMakeLists.txt
+      run: echo "target_link_libraries(clang PRIVATE LLVMObfuscation)" >> hikari/clang/tools/driver/CMakeLists.txt
 
     - name: Configure
       run: |
@@ -47,13 +54,17 @@ jobs:
           -DLLVM_INCLUDE_BENCHMARKS=OFF
 
     - name: Build
-      run: cmake --build build -j $env:NUMBER_OF_PROCESSORS --target clang 2>&1 | Select-Object -Last 20
+      run: cmake --build build -j $env:NUMBER_OF_PROCESSORS --target clang 2>&1 | Select-Object -Last 30
+
+    - name: ccache stats
+      run: ccache -s
 
     - name: Package
       run: |
         mkdir out\bin
         copy build\bin\clang.exe out\bin\
         copy build\bin\clang++.exe out\bin\
+        if exist build\lib\clang xcopy /E /I build\lib\clang out\lib\clang
         Compress-Archive -Path out\* -DestinationPath hikari-llvm19-windows.zip
 
     - name: Upload
@@ -71,13 +82,25 @@ jobs:
       with:
         path: hikari
 
-    - name: Install deps
-      run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: hikari-ccache-linux-${{ hashFiles('.github/workflows/build-ollvm.yml') }}
+        restore-keys: hikari-ccache-linux-
 
-    - name: Enable Obfuscation in build
+    - name: Install deps
       run: |
-        echo "add_subdirectory(Obfuscation)" >> hikari/llvm/lib/Transforms/CMakeLists.txt
-        echo "target_link_libraries(clang PRIVATE LLVMObfuscation)" >> hikari/clang/tools/driver/CMakeLists.txt
+        sudo apt-get update
+        sudo apt-get install -y ninja-build ccache
+
+    - name: Setup ccache
+      run: |
+        ccache --set-config=max_size=5G
+        ccache --zero-stats
+
+    - name: Link Obfuscation to clang
+      run: echo "target_link_libraries(clang PRIVATE LLVMObfuscation)" >> hikari/clang/tools/driver/CMakeLists.txt
 
     - name: Configure
       run: |
@@ -93,12 +116,16 @@ jobs:
           -DLLVM_INCLUDE_BENCHMARKS=OFF
 
     - name: Build
-      run: cmake --build build -j$(nproc) --target clang 2>&1 | tail -20
+      run: cmake --build build -j$(nproc) --target clang 2>&1 | tail -30
+
+    - name: ccache stats
+      run: ccache -s
 
     - name: Package
       run: |
-        mkdir -p out/bin
+        mkdir -p out/bin out/lib
         cp build/bin/clang build/bin/clang++ out/bin/
+        if [ -d build/lib/clang ]; then cp -r build/lib/clang out/lib/; fi
         tar -czf hikari-llvm19-linux.tar.gz -C out .
 
     - name: Upload
